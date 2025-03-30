@@ -158,9 +158,15 @@ else:
     # Bot Status
     st.header("Bot Status")
     
-    # Get current status
+# Get current status with error handling
+try:
     streamlit_status = db.bot_status.find_one({"bot_type": "streamlit"})
     slack_status = db.bot_status.find_one({"bot_type": "slack"})
+except Exception as e:
+    st.error(f"Error retrieving status: {str(e)}")
+    # Create fallback status
+    streamlit_status = {"bot_type": "streamlit", "last_heartbeat": datetime.now()}
+    slack_status = {"bot_type": "slack", "last_heartbeat": datetime.now()}
     
     # Calculate status based on last heartbeat
     def get_status(heartbeat_doc):
