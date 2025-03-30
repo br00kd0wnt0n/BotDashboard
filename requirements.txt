@@ -3,4 +3,7 @@ pandas
 plotly
 pymongo==3.11.0
 python-dotenv
-certifi
+certifi==2020.12.5
+dnspython==2.0.0
+
+
