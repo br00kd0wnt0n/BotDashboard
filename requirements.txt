@@ -1,6 +1,6 @@
 streamlit
 pandas
 plotly
-pymongo
+pymongo==3.11.0
 python-dotenv
 certifi
