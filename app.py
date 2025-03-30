@@ -25,7 +25,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # API base URL - replace with your deployed API URL
-API_BASE_URL = "https://your-api-url.herokuapp.com/api"
+API_BASE_URL = "https://git.heroku.com/ralphbot-api.git"
 
 # Function to fetch data from API with error handling
 def fetch_api_data(endpoint, params=None):
