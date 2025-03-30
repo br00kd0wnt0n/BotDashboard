@@ -54,36 +54,38 @@ def get_mock_data():
     
     return MockDB()
 
-# Database connection with custom SSL context
+# Database connection with TLS parameters
 def get_mongodb_connection():
-   # Inside your get_mongodb_connection() function
     try:
-    # Get MongoDB URI from secrets or use fallback
+        # Get MongoDB URI from secrets or use fallback
         mongo_uri = st.secrets.get("mongodb", {}).get("uri", None)
-    if not mongo_uri:
-        mongo_uri = "mongodb+srv://br00kd0wnt0wn:XHZo54P7bqrVUIzj@ralphbot.nsyijw5.mongodb.net/?retryWrites=true&w=majority&appName=RalphBot"
-        st.sidebar.info("Using hardcoded MongoDB connection")
-    
-    # Connect with TLS parameters
-    client = MongoClient(
-        mongo_uri,
-        serverSelectionTimeoutMS=10000,
-        connectTimeoutMS=30000,
-        socketTimeoutMS=30000,
-        tls=True,  # Modern way to specify TLS connection (equivalent to --tls)
-        tlsAllowInvalidCertificates=True  # Skip certificate validation (equivalent to --tlsAllowInvalidCertificates)
-    )
-    
-    # Test the connection
-    client.admin.command('ping')
-    
-    # Get database
-    db = client.ralphbot_analytics
-    
-    st.sidebar.success("MongoDB connected successfully")
-    
-    # Continue with the rest of your code...
+        if not mongo_uri:
+            mongo_uri = "mongodb+srv://br00kd0wnt0wn:XHZo54P7bqrVUIzj@ralphbot.nsyijw5.mongodb.net/?retryWrites=true&w=majority&appName=RalphBot"
+            st.sidebar.info("Using hardcoded MongoDB connection")
         
+        # Connect with TLS parameters
+        client = MongoClient(
+            mongo_uri,
+            serverSelectionTimeoutMS=10000,
+            connectTimeoutMS=30000,
+            socketTimeoutMS=30000,
+            tls=True,  # Modern way to specify TLS connection
+            tlsAllowInvalidCertificates=True  # Skip certificate validation
+        )
+        
+        # Test the connection
+        client.admin.command('ping')
+        
+        # Get database
+        db = client.ralphbot_analytics
+        
+        st.sidebar.success("MongoDB connected successfully")
+        return db
+        
+    except Exception as e:
+        st.sidebar.error(f"MongoDB connection error: {str(e)}")
+        return None
+    
         # Wrapper class to handle database operations
         class MongoWrapper:
             def __init__(self, db):
