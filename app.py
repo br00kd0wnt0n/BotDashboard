@@ -27,7 +27,7 @@ st.markdown("""
 # Database connection
 @st.cache_resource
 def get_database_connection():
-    mongo_uri = os.getenv("MONGO_URI")
+    mongo_uri = os.getenv("mongodb+srv://br00kd0wnt0n:XHZo54P7bqrVUIzj@ralphbot.nsyijw5.mongodb.net/?retryWrites=true&w=majority&appName=RalphBot")
     client = MongoClient(mongo_uri)
     return client.ralphbot_analytics
 
