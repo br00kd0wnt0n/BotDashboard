@@ -24,23 +24,78 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Update the database connection function with error handling
+# Database connection with better error handling
 @st.cache_resource
 def get_database_connection():
     try:
-        mongo_uri = st.secrets["mongodb"]["uri"]
-        client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)  # 5 second timeout
-        # Test the connection
-        client.server_info()
-        st.sidebar.success("Database connected successfully")
+        # Get MongoDB URI from secrets or use fallback
+        if "mongodb" in st.secrets:
+            mongo_uri = st.secrets["mongodb"]["uri"]
+        else:
+            mongo_uri = "mongodb+srv://br00kd0wnt0n:XHZo54P7bqrVUIzj@ralphbot.nsyijw5.mongodb.net/?retryWrites=true&w=majority&appName=RalphBot"
+            st.sidebar.warning("Using hardcoded database connection")
+        
+        # Connect with longer timeout and retry options
+        client = MongoClient(
+            mongo_uri,
+            serverSelectionTimeoutMS=10000,  # 10 second timeout
+            connectTimeoutMS=20000,
+            socketTimeoutMS=20000,
+            retryWrites=True,
+            w="majority"
+        )
+        
+        # Test connection
+        client.admin.command('ping')
+        st.sidebar.success("MongoDB connected successfully")
         return client.ralphbot_analytics
     except Exception as e:
-        st.sidebar.error(f"Database connection error: {e}")
-        # Return a dummy database for UI testing
+        st.sidebar.error(f"Database connection error: {str(e)}")
+        # Return None or a dummy database for UI testing
         return None
 
-# Update the dashboard code to handle missing DB connection
-db = get_database_connection()
+# After the database connection
+if db is None:
+    st.error("Could not connect to the database. Using mock data for demonstration.")
+    # Create mock data
+    class MockCollection:
+        def __init__(self, data=None):
+            self.data = data or []
+        
+        def find_one(self, query=None):
+            if not self.data:
+                return None
+            return self.data[0]
+            
+        def find(self, query=None):
+            return self.data
+            
+        def count_documents(self, query=None):
+            return len(self.data)
+            
+        def distinct(self, field, query=None):
+            return list(set(d.get(field) for d in self.data if field in d))
+            
+        def aggregate(self, pipeline):
+            # Simple mock for aggregation
+            return [{"_id": "streamlit", "avg_time": 500}, {"_id": "slack", "avg_time": 700}]
+    
+    # Create mock database
+    class MockDB:
+        def __init__(self):
+            self.bot_status = MockCollection([
+                {"bot_type": "streamlit", "last_heartbeat": datetime.now()},
+                {"bot_type": "slack", "last_heartbeat": datetime.now() - timedelta(minutes=10)}
+            ])
+            self.interactions = MockCollection([
+                {"timestamp": datetime.now(), "user_id": "user1", "query": "Sample query", 
+                 "response": "Sample response", "bot_type": "streamlit", "response_time_ms": 500},
+                {"timestamp": datetime.now() - timedelta(hours=1), "user_id": "user2", 
+                 "query": "Another query", "response": "Another response", "bot_type": "slack", 
+                 "response_time_ms": 700}
+            ])
+    
+    db = MockDB()
 
 # Add debug information
 if db:
