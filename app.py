@@ -4,6 +4,7 @@ import plotly.express as px
 from pymongo import MongoClient
 from datetime import datetime, timedelta
 import os
+import ssl
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -52,7 +53,7 @@ def get_mock_data():
     
     return MockDB()
 
-# Set up MongoDB connection with proper error handling
+# Set up MongoDB connection with proper error handling and SSL configuration
 def get_mongodb_connection():
     try:
         # MongoDB connection string - using st.secrets if available
@@ -63,12 +64,21 @@ def get_mongodb_connection():
             mongo_uri = os.getenv("MONGO_URI", "mongodb+srv://br00kd0wnt0wn:XHZo54P7bqrVUIzj@ralphbot.nsyijw5.mongodb.net/?retryWrites=true&w=majority&appName=RalphBot")
             st.sidebar.info("Using environment variable for MongoDB connection")
         
-        # Connect with timeout settings
+        # Connect with explicit SSL configuration
         client = MongoClient(
             mongo_uri,
             serverSelectionTimeoutMS=5000,
             connectTimeoutMS=10000,
-            socketTimeoutMS=10000
+            socketTimeoutMS=10000,
+            ssl=True,
+            ssl_cert_reqs=ssl.CERT_NONE,  # Less secure but helps bypass cert issues
+            tlsAllowInvalidCertificates=True  # For older PyMongo versions
+        )
+        
+        # Test the connection
+        client.admin.command('ping')
+        
+        # Rest of the code remains the same...
         )
         
         # Test the connection
