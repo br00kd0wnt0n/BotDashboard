@@ -93,50 +93,27 @@ else:
     # Display status indicators
     col1, col2 = st.columns(2)
     with col1:
-        st.markdown(f"""
-        <div style="
-            display: flex;
-            align-items: center;
-            padding: 10px;
-            border-radius: 5px;
-            background-color: #f0f0f0;
-        ">
-            <div style="
-                width: 20px;
-                height: 20px;
-                border-radius: 50%;
-                background-color: {streamlit_color};
-                margin-right: 10px;
-            "></div>
-            <div>
-                <strong>Streamlit Bot:</strong> {streamlit_status_text}<br>
-                {streamlit_status.get("last_heartbeat").strftime("%Y-%m-%d %H:%M:%S") if streamlit_status and streamlit_status.get("last_heartbeat") else "No data"}
-            </div>
+    st.markdown(f"""
+    <div class="status-box">
+        <div class="status-indicator" style="background-color: {streamlit_color};"></div>
+        <div>
+            <strong>Streamlit Bot:</strong> {streamlit_status_text}<br>
+            {streamlit_status.get("last_heartbeat").strftime("%Y-%m-%d %H:%M:%S") if streamlit_status and streamlit_status.get("last_heartbeat") else "No data"}
         </div>
-        """, unsafe_allow_html=True)
+    </div>
+    """, unsafe_allow_html=True)
+        
     
     with col2:
         st.markdown(f"""
-        <div style="
-            display: flex;
-            align-items: center;
-            padding: 10px;
-            border-radius: 5px;
-            background-color: #f0f0f0;
-        ">
-            <div style="
-                width: 20px;
-                height: 20px;
-                border-radius: 50%;
-                background-color: {slack_color};
-                margin-right: 10px;
-            "></div>
-            <div>
-                <strong>Slack Bot:</strong> {slack_status_text}<br>
-                {slack_status.get("last_heartbeat").strftime("%Y-%m-%d %H:%M:%S") if slack_status and slack_status.get("last_heartbeat") else "No data"}
-            </div>
+    <div class="status-box">
+        <div class="status-indicator" style="background-color: {streamlit_color};"></div>
+        <div>
+            <strong>Streamlit Bot:</strong> {streamlit_status_text}<br>
+            {streamlit_status.get("last_heartbeat").strftime("%Y-%m-%d %H:%M:%S") if streamlit_status and streamlit_status.get("last_heartbeat") else "No data"}
         </div>
-        """, unsafe_allow_html=True)
+    </div>
+    """, unsafe_allow_html=True)
     
     # Auto-refresh
     st.sidebar.title("Dashboard Controls")
