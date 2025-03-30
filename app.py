@@ -38,6 +38,11 @@ def fetch_api_data(endpoint, params=None):
     except requests.exceptions.RequestException as e:
         st.sidebar.error(f"API Error: {str(e)}")
         return None
+        
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        st.sidebar.error(f"Request Error: {str(e)}")
+        return None
 
 # Create mock data function for fallback
 def get_mock_data():
