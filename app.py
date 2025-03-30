@@ -33,12 +33,7 @@ def fetch_api_data(endpoint, params=None):
         # Remove the extra slash and ensure clean URL construction
         full_url = f"{API_BASE_URL.rstrip('/')}/{endpoint.lstrip('/')}"
         response = requests.get(full_url, params=params, timeout=10)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        st.sidebar.error(f"API Error: {str(e)}")
-        return None
-        
+        response.raise_for_status()  
         return response.json()
     except requests.exceptions.RequestException as e:
         st.sidebar.error(f"Request Error: {str(e)}")
