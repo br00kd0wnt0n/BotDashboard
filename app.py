@@ -1,15 +1,11 @@
+# streamlit_app.py - Your updated Streamlit dashboard
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from pymongo import MongoClient
 from datetime import datetime, timedelta
 import os
-from dotenv import load_dotenv
-import ssl
-import certifi
-
-# Load environment variables
-load_dotenv()
+import requests
+import json
 
 # Set page config
 st.set_page_config(
@@ -27,6 +23,19 @@ st.markdown("""
     h1, h2, h3 {color: #222222;} /* Even darker text for headings */
 </style>
 """, unsafe_allow_html=True)
+
+# API base URL - replace with your deployed API URL
+API_BASE_URL = "https://your-api-url.herokuapp.com/api"
+
+# Function to fetch data from API with error handling
+def fetch_api_data(endpoint, params=None):
+    try:
+        response = requests.get(f"{API_BASE_URL}/{endpoint}", params=params, timeout=10)
+        response.raise_for_status()  # Raise an exception for 4XX/5XX responses
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        st.sidebar.error(f"API Error: {str(e)}")
+        return None
 
 # Create mock data function for fallback
 def get_mock_data():
@@ -54,295 +63,6 @@ def get_mock_data():
     
     return MockDB()
 
-# Database connection with TLS parameters
-def get_mongodb_connection():
-    try:
-        # Use a direct connection string without SRV format
-        mongo_uri = "mongodb://br00kd0wnt0wn:XHZo54P7bqrVUIzj@ac-cb7jrqo-shard-00-00.nsyijw5.mongodb.net:27017,ac-cb7jrqo-shard-00-01.nsyijw5.mongodb.net:27017,ac-cb7jrqo-shard-00-02.nsyijw5.mongodb.net:27017/ralphbot_analytics?replicaSet=atlas-e0jjn5-shard-0&authSource=admin"
-        
-        # Connect with SSL/TLS parameters directly
-        client = MongoClient(
-            mongo_uri,
-            serverSelectionTimeoutMS=10000,
-            connectTimeoutMS=30000,
-            socketTimeoutMS=30000,
-            ssl=True,
-            ssl_cert_reqs=0  # CERT_NONE=0, disables certificate validation
-        )
-        
-        # Test the connection
-        client.admin.command('ping')
-        
-        # Get database
-        db = client.ralphbot_analytics
-        
-        st.sidebar.success("MongoDB connected successfully")
-        return db
-        
-    except Exception as e:
-        st.sidebar.error(f"MongoDB connection error: {str(e)}")
-        return None
-    
-        # Wrapper class to handle database operations
-        class MongoWrapper:
-            def __init__(self, db):
-                self.db = db
-                self.bot_status = {}
-                
-                # Initialize bot status cache
-                streamlit_status = self.db.bot_status.find_one({"bot_type": "streamlit"})
-                slack_status = self.db.bot_status.find_one({"bot_type": "slack"})
-                
-                if streamlit_status:
-                    self.bot_status["streamlit"] = streamlit_status
-                else:
-                    self.bot_status["streamlit"] = {"bot_type": "streamlit", "last_heartbeat": datetime.now()}
-                    
-                if slack_status:
-                    self.bot_status["slack"] = slack_status
-                else:
-                    self.bot_status["slack"] = {"bot_type": "slack", "last_heartbeat": datetime.now() - timedelta(minutes=15)}
-                
-            def get_bot_status(self, bot_type):
-                return self.bot_status.get(bot_type)
-                
-            def get_interactions(self, start_time, end_time, bot_type=None):
-                try:
-                    query = {"timestamp": {"$gte": start_time, "$lte": end_time}}
-                    if bot_type and bot_type != "Both":
-                        query["bot_type"] = bot_type.lower()
-                    
-                    return list(self.db.interactions.find(query).sort("timestamp", -1).limit(50))
-                except Exception as e:
-                    st.sidebar.warning(f"Error fetching interactions: {e}")
-                    return []
-            
-            def get_interaction_count(self, start_time, end_time, bot_type=None):
-                try:
-                    query = {"timestamp": {"$gte": start_time, "$lte": end_time}}
-                    if bot_type:
-                        query["bot_type"] = bot_type
-                    
-                    return self.db.interactions.count_documents(query)
-                except Exception as e:
-                    st.sidebar.warning(f"Error counting interactions: {e}")
-                    return 0
-            
-            def get_unique_users(self, start_time, end_time, bot_type=None):
-                try:
-                    query = {"timestamp": {"$gte": start_time, "$lte": end_time}}
-                    if bot_type:
-                        query["bot_type"] = bot_type
-                    
-                    return len(self.db.interactions.distinct("user_id", query))
-                except Exception as e:
-                    st.sidebar.warning(f"Error counting unique users: {e}")
-                    return 0
-            
-            def get_average_response_time(self, start_time, end_time, bot_type=None):
-                try:
-                    query = {
-                        "timestamp": {"$gte": start_time, "$lte": end_time},
-                        "response_time_ms": {"$exists": True, "$ne": 0}
-                    }
-                    if bot_type:
-                        query["bot_type"] = bot_type
-                    
-                    result = list(self.db.interactions.aggregate([
-                        {"$match": query},
-                        {"$group": {"_id": None, "avg_time": {"$avg": "$response_time_ms"}}}
-                    ]))
-                    
-                    if result:
-                        return result[0]["avg_time"]
-                    return 0
-                except Exception as e:
-                    st.sidebar.warning(f"Error calculating average response time: {e}")
-                    return 0
-            
-            def get_daily_activity(self, start_time, end_time):
-                try:
-                    result = list(self.db.interactions.aggregate([
-                        {"$match": {"timestamp": {"$gte": start_time, "$lte": end_time}}},
-                        {"$group": {
-                            "_id": {
-                                "date": {"$dateToString": {"format": "%Y-%m-%d", "date": "$timestamp"}},
-                                "bot_type": "$bot_type"
-                            },
-                            "count": {"$sum": 1}
-                        }},
-                        {"$sort": {"_id.date": 1}}
-                    ]))
-                    
-                    # Convert to DataFrame format
-                    if result:
-                        return pd.DataFrame([
-                            {"date": item["_id"]["date"], 
-                             "bot_type": item["_id"]["bot_type"], 
-                             "count": item["count"]}
-                            for item in result
-                        ])
-                    return pd.DataFrame()
-                except Exception as e:
-                    st.sidebar.warning(f"Error calculating daily activity: {e}")
-                    return pd.DataFrame()
-            
-            def get_top_queries(self, start_time, end_time, limit=10):
-                try:
-                    result = list(self.db.interactions.aggregate([
-                        {"$match": {"timestamp": {"$gte": start_time, "$lte": end_time}}},
-                        {"$group": {"_id": "$query", "count": {"$sum": 1}}},
-                        {"$sort": {"count": -1}},
-                        {"$limit": limit}
-                    ]))
-                    
-                    # Convert to DataFrame format
-                    if result:
-                        return pd.DataFrame([
-                            {"query": item["_id"], "count": item["count"]} 
-                            for item in result
-                        ])
-                    return pd.DataFrame()
-                except Exception as e:
-                    st.sidebar.warning(f"Error calculating top queries: {e}")
-                    return pd.DataFrame()
-            
-            def get_response_times(self, start_time, end_time, bot_type):
-                try:
-                    query = {
-                        "timestamp": {"$gte": start_time, "$lte": end_time},
-                        "bot_type": bot_type.lower(),
-                        "response_time_ms": {"$exists": True, "$ne": 0}
-                    }
-                    
-                    result = list(self.db.interactions.find(query, {"response_time_ms": 1}))
-                    
-                    if result:
-                        return [doc["response_time_ms"] for doc in result]
-                    return []
-                except Exception as e:
-                    st.sidebar.warning(f"Error fetching response times: {e}")
-                    return []
-        
-        return MongoWrapper(db)
-        
-    except Exception as e:
-        st.sidebar.error(f"MongoDB connection error: {str(e)}")
-        return None
-
-# Attempt to connect to MongoDB, fall back to mock data if needed
-try:
-    mongodb = get_mongodb_connection()
-    if mongodb:
-        db = mongodb
-        st.sidebar.success("Using real MongoDB data")
-        using_mock = False
-    else:
-        mock_db = get_mock_data()
-        st.sidebar.warning("Using mock data (MongoDB connection failed)")
-        using_mock = True
-        
-        # Create a wrapper for mock data with the same interface
-        class MockWrapper:
-            def __init__(self, mock_db):
-                self.mock_db = mock_db
-            
-            def get_bot_status(self, bot_type):
-                return self.mock_db.bot_status.get(bot_type)
-            
-            def get_interactions(self, start_time, end_time, bot_type=None):
-                filtered = [i for i in self.mock_db.interactions 
-                           if start_time <= i["timestamp"] <= end_time]
-                
-                if bot_type and bot_type != "Both":
-                    filtered = [i for i in filtered if i["bot_type"] == bot_type.lower()]
-                
-                return sorted(filtered, key=lambda x: x["timestamp"], reverse=True)[:50]
-            
-            def get_interaction_count(self, start_time, end_time, bot_type=None):
-                filtered = [i for i in self.mock_db.interactions 
-                           if start_time <= i["timestamp"] <= end_time]
-                
-                if bot_type:
-                    filtered = [i for i in filtered if i["bot_type"] == bot_type]
-                
-                return len(filtered)
-            
-            def get_unique_users(self, start_time, end_time, bot_type=None):
-                filtered = [i for i in self.mock_db.interactions 
-                           if start_time <= i["timestamp"] <= end_time]
-                
-                if bot_type:
-                    filtered = [i for i in filtered if i["bot_type"] == bot_type]
-                
-                return len(set(i["user_id"] for i in filtered))
-            
-            def get_average_response_time(self, start_time, end_time, bot_type=None):
-                filtered = [i for i in self.mock_db.interactions 
-                           if start_time <= i["timestamp"] <= end_time
-                           and "response_time_ms" in i]
-                
-                if bot_type:
-                    filtered = [i for i in filtered if i["bot_type"] == bot_type]
-                
-                if filtered:
-                    return sum(i["response_time_ms"] for i in filtered) / len(filtered)
-                return 0
-            
-            def get_daily_activity(self, start_time, end_time):
-                filtered = [i for i in self.mock_db.interactions 
-                           if start_time <= i["timestamp"] <= end_time]
-                
-                # Group by date and bot_type
-                daily_data = {}
-                for interaction in filtered:
-                    date_str = interaction["timestamp"].strftime("%Y-%m-%d")
-                    bot_type = interaction["bot_type"]
-                    key = (date_str, bot_type)
-                    
-                    if key not in daily_data:
-                        daily_data[key] = 0
-                    daily_data[key] += 1
-                
-                # Convert to DataFrame
-                return pd.DataFrame([
-                    {"date": date, "bot_type": bot_type, "count": count}
-                    for (date, bot_type), count in daily_data.items()
-                ])
-            
-            def get_top_queries(self, start_time, end_time, limit=10):
-                filtered = [i for i in self.mock_db.interactions 
-                           if start_time <= i["timestamp"] <= end_time]
-                
-                # Count queries
-                query_counts = {}
-                for interaction in filtered:
-                    query = interaction["query"]
-                    if query not in query_counts:
-                        query_counts[query] = 0
-                    query_counts[query] += 1
-                
-                # Convert to DataFrame and sort
-                return pd.DataFrame([
-                    {"query": query, "count": count}
-                    for query, count in query_counts.items()
-                ]).sort_values("count", ascending=False).head(limit)
-            
-            def get_response_times(self, start_time, end_time, bot_type):
-                filtered = [i["response_time_ms"] for i in self.mock_db.interactions 
-                           if start_time <= i["timestamp"] <= end_time
-                           and i["bot_type"] == bot_type.lower()
-                           and "response_time_ms" in i]
-                
-                return filtered
-        
-        db = MockWrapper(mock_db)
-except Exception as e:
-    st.sidebar.error(f"Error initializing data: {e}")
-    mock_db = get_mock_data()
-    db = MockWrapper(mock_db)
-    using_mock = True
-
 # Authentication
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
@@ -363,15 +83,6 @@ else:
     # Main dashboard
     st.title("RalphBot Analytics Dashboard")
     
-    # Show mock data warning if using mock data
-    if using_mock:
-        st.warning("""
-            ⚠️ **Using Mock Data** ⚠️  
-            
-            The dashboard is currently using simulated data because MongoDB connection failed.
-            Check the sidebar for error details.
-        """)
-    
     # Date range selector
     col1, col2 = st.columns(2)
     with col1:
@@ -383,12 +94,34 @@ else:
     start_datetime = datetime.combine(start_date, datetime.min.time())
     end_datetime = datetime.combine(end_date, datetime.max.time())
     
+    # Date parameters for API calls
+    date_params = {
+        'start_date': start_datetime.isoformat(),
+        'end_date': end_datetime.isoformat()
+    }
+    
     # Bot Status
     st.header("Bot Status")
     
-    # Get current status
-    streamlit_status = db.get_bot_status("streamlit")
-    slack_status = db.get_bot_status("slack")
+    # Fetch status data from API
+    status_data = fetch_api_data('status')
+    
+    # Use mock data if API call fails
+    if not status_data:
+        mock_db = get_mock_data()
+        streamlit_status = mock_db.bot_status["streamlit"]
+        slack_status = mock_db.bot_status["slack"]
+        st.warning("Using mock data (API connection failed)")
+    else:
+        streamlit_status = status_data.get("streamlit", {})
+        slack_status = status_data.get("slack", {})
+        
+        # Convert ISO datetime strings to datetime objects
+        if streamlit_status and 'last_heartbeat' in streamlit_status:
+            streamlit_status['last_heartbeat'] = datetime.fromisoformat(streamlit_status['last_heartbeat'].replace('Z', '+00:00'))
+        
+        if slack_status and 'last_heartbeat' in slack_status:
+            slack_status['last_heartbeat'] = datetime.fromisoformat(slack_status['last_heartbeat'].replace('Z', '+00:00'))
     
     # Calculate status based on last heartbeat
     def get_status(status_doc):
@@ -480,15 +213,35 @@ else:
     with tab1:
         st.header("Overview Metrics")
         
-        # Fetch metrics using the wrapper methods
-        total_streamlit = db.get_interaction_count(start_datetime, end_datetime, "streamlit")
-        total_slack = db.get_interaction_count(start_datetime, end_datetime, "slack")
+        # Fetch metrics from API
+        metrics_data = fetch_api_data('metrics', date_params)
         
-        unique_streamlit = db.get_unique_users(start_datetime, end_datetime, "streamlit")
-        unique_slack = db.get_unique_users(start_datetime, end_datetime, "slack")
-        
-        avg_streamlit_time = db.get_average_response_time(start_datetime, end_datetime, "streamlit")
-        avg_slack_time = db.get_average_response_time(start_datetime, end_datetime, "slack")
+        # Use mock data if API call fails
+        if not metrics_data:
+            mock_db = get_mock_data()
+            
+            # Count metrics from mock data
+            filtered = [i for i in mock_db.interactions 
+                       if start_datetime <= i["timestamp"] <= end_datetime]
+            
+            total_streamlit = len([i for i in filtered if i["bot_type"] == "streamlit"])
+            total_slack = len([i for i in filtered if i["bot_type"] == "slack"])
+            
+            unique_streamlit = len(set(i["user_id"] for i in filtered if i["bot_type"] == "streamlit"))
+            unique_slack = len(set(i["user_id"] for i in filtered if i["bot_type"] == "slack"))
+            
+            streamlit_times = [i["response_time_ms"] for i in filtered if i["bot_type"] == "streamlit"]
+            slack_times = [i["response_time_ms"] for i in filtered if i["bot_type"] == "slack"]
+            
+            avg_streamlit_time = sum(streamlit_times) / max(1, len(streamlit_times))
+            avg_slack_time = sum(slack_times) / max(1, len(slack_times))
+        else:
+            total_streamlit = metrics_data.get("total_streamlit", 0)
+            total_slack = metrics_data.get("total_slack", 0)
+            unique_streamlit = metrics_data.get("unique_streamlit", 0)
+            unique_slack = metrics_data.get("unique_slack", 0)
+            avg_streamlit_time = metrics_data.get("avg_streamlit_time", 0)
+            avg_slack_time = metrics_data.get("avg_slack_time", 0)
         
         # Display metrics
         col1, col2, col3, col4 = st.columns(4)
@@ -507,10 +260,36 @@ else:
         with col2:
             st.metric("Avg. Slack Response Time", f"{int(avg_slack_time)}ms")
         
-        # Daily activity chart
-        daily_df = db.get_daily_activity(start_datetime, end_datetime)
+        # Fetch daily activity data from API
+        daily_data = fetch_api_data('daily_activity', date_params)
         
-        if not daily_df.empty:
+        # Use mock data if API call fails
+        if not daily_data:
+            mock_db = get_mock_data()
+            filtered = [i for i in mock_db.interactions 
+                       if start_datetime <= i["timestamp"] <= end_datetime]
+            
+            # Group by date and bot_type
+            daily_dict = {}
+            for interaction in filtered:
+                date_str = interaction["timestamp"].strftime("%Y-%m-%d")
+                bot_type = interaction["bot_type"]
+                key = (date_str, bot_type)
+                
+                if key not in daily_dict:
+                    daily_dict[key] = 0
+                daily_dict[key] += 1
+            
+            # Convert to list format
+            daily_data = [
+                {"date": date, "bot_type": bot_type, "count": count}
+                for (date, bot_type), count in daily_dict.items()
+            ]
+        
+        # Convert to DataFrame for plotting
+        if daily_data:
+            daily_df = pd.DataFrame(daily_data)
+            
             fig = px.line(
                 daily_df, 
                 x="date", 
@@ -528,8 +307,26 @@ else:
         
         bot_type = st.selectbox("Select Bot", ["Both", "Streamlit", "Slack"])
         
-        # Get conversations
-        conversations = db.get_interactions(start_datetime, end_datetime, bot_type)
+        # Fetch conversations from API
+        interactions_params = date_params.copy()
+        interactions_params['bot_type'] = bot_type
+        conversations = fetch_api_data('interactions', interactions_params)
+        
+        # Use mock data if API call fails
+        if not conversations:
+            mock_db = get_mock_data()
+            filtered = [i for i in mock_db.interactions 
+                       if start_datetime <= i["timestamp"] <= end_datetime]
+            
+            if bot_type != "Both":
+                filtered = [i for i in filtered if i["bot_type"] == bot_type.lower()]
+            
+            conversations = sorted(filtered, key=lambda x: x["timestamp"], reverse=True)[:50]
+        else:
+            # Convert ISO datetime strings to datetime objects
+            for conv in conversations:
+                if 'timestamp' in conv:
+                    conv['timestamp'] = datetime.fromisoformat(conv['timestamp'].replace('Z', '+00:00'))
         
         # Display conversations
         if conversations:
@@ -545,10 +342,33 @@ else:
     with tab3:
         st.header("Advanced Analysis")
         
-        # Top queries
-        query_df = db.get_top_queries(start_datetime, end_datetime)
+        # Fetch top queries from API
+        top_queries = fetch_api_data('top_queries', date_params)
         
-        if not query_df.empty:
+        # Use mock data if API call fails
+        if not top_queries:
+            mock_db = get_mock_data()
+            filtered = [i for i in mock_db.interactions 
+                       if start_datetime <= i["timestamp"] <= end_datetime]
+            
+            # Count queries
+            query_counts = {}
+            for interaction in filtered:
+                query = interaction["query"]
+                if query not in query_counts:
+                    query_counts[query] = 0
+                query_counts[query] += 1
+            
+            # Convert to list format
+            top_queries = [
+                {"query": query, "count": count}
+                for query, count in sorted(query_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+            ]
+        
+        # Convert to DataFrame for plotting
+        if top_queries:
+            query_df = pd.DataFrame(top_queries)
+            
             st.subheader("Most Common Queries")
             fig = px.bar(
                 query_df, 
@@ -566,7 +386,19 @@ else:
         st.subheader("Response Time Distribution")
         bot_selector = st.radio("Select Bot Type", ["Streamlit", "Slack"], horizontal=True)
         
-        response_times = db.get_response_times(start_datetime, end_datetime, bot_selector)
+        # Fetch response times from API
+        response_times_params = date_params.copy()
+        response_times_params['bot_type'] = bot_selector
+        response_times = fetch_api_data('response_times', response_times_params)
+        
+        # Use mock data if API call fails
+        if not response_times:
+            mock_db = get_mock_data()
+            filtered = [i for i in mock_db.interactions 
+                       if start_datetime <= i["timestamp"] <= end_datetime
+                       and i["bot_type"] == bot_selector.lower()]
+            
+            response_times = [i["response_time_ms"] for i in filtered]
         
         if response_times:
             fig = px.histogram(
