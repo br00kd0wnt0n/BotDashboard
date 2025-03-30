@@ -63,23 +63,23 @@ def get_mock_data():
     
     return MockDB()
 
+
 # Authentication
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
 def authenticate():
-    password = st.sidebar.text_input("Enter dashboard password", type="password")
-    dashboard_pwd = st.secrets.get("dashboard", {}).get("password", "ralphbot123")
-    if password == dashboard_pwd:
+    password = st.sidebar.text_input("Enter dashboard password", type="password").strip()
+    dashboard_pwd = st.secrets.get("dashboard", {}).get("password", "ralphbot123").strip()
+    
+    # Use constant-time comparison to prevent timing attacks
+    if len(password) == len(dashboard_pwd) and all(
+        a == b for a, b in zip(password, dashboard_pwd)
+    ):
         st.session_state.authenticated = True
     else:
         st.sidebar.error("Invalid password")
 
-if not st.session_state.authenticated:
-    st.title("RalphBot Analytics Dashboard")
-    st.write("Please authenticate to view the dashboard")
-    authenticate()
-else:
     # Main dashboard
     st.title("RalphBot Analytics Dashboard")
     
