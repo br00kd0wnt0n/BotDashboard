@@ -60,27 +60,14 @@ def get_mongodb_connection():
         # Use a direct connection string without SRV format
         mongo_uri = "mongodb://br00kd0wnt0wn:XHZo54P7bqrVUIzj@ac-cb7jrqo-shard-00-00.nsyijw5.mongodb.net:27017,ac-cb7jrqo-shard-00-01.nsyijw5.mongodb.net:27017,ac-cb7jrqo-shard-00-02.nsyijw5.mongodb.net:27017/ralphbot_analytics?replicaSet=atlas-e0jjn5-shard-0&authSource=admin"
         
-        # Import necessary SSL modules
-        import ssl
-        import certifi
-        
-        # Create a custom SSL context with lower security for testing
-        ssl_context = ssl.create_default_context(cafile=certifi.where())
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE
-        
-        # Force TLS version 1.2
-        ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
-        ssl_context.maximum_version = ssl.TLSVersion.TLSv1_2
-        
-        # Connect with custom SSL context
+        # Connect with SSL/TLS parameters directly
         client = MongoClient(
             mongo_uri,
             serverSelectionTimeoutMS=10000,
             connectTimeoutMS=30000,
             socketTimeoutMS=30000,
             ssl=True,
-            ssl_context=ssl_context
+            ssl_cert_reqs=0  # CERT_NONE=0, disables certificate validation
         )
         
         # Test the connection
