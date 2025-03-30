@@ -24,6 +24,43 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# Update the database connection function with error handling
+@st.cache_resource
+def get_database_connection():
+    try:
+        mongo_uri = st.secrets["mongodb"]["uri"]
+        client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)  # 5 second timeout
+        # Test the connection
+        client.server_info()
+        st.sidebar.success("Database connected successfully")
+        return client.ralphbot_analytics
+    except Exception as e:
+        st.sidebar.error(f"Database connection error: {e}")
+        # Return a dummy database for UI testing
+        return None
+
+# Update the dashboard code to handle missing DB connection
+db = get_database_connection()
+
+# Add debug information
+if db:
+    # Display DB connection info
+    st.sidebar.info("Connected to MongoDB")
+    
+    # Check if status collections exist
+    status_count = db.bot_status.count_documents({})
+    st.sidebar.write(f"Bot status documents: {status_count}")
+    
+    # List all status documents for debugging
+    all_statuses = list(db.bot_status.find({}))
+    with st.sidebar.expander("All Status Documents"):
+        st.write(all_statuses)
+else:
+    st.sidebar.warning("Using dummy data (no database connection)")
+    # Create dummy data for UI testing
+    streamlit_status = {"bot_type": "streamlit", "last_heartbeat": datetime.now()}
+    slack_status = {"bot_type": "slack", "last_heartbeat": datetime.now() - timedelta(minutes=10)}
+
 # Database connection
 @st.cache_resource
 def get_database_connection():
@@ -89,6 +126,40 @@ else:
     # Get statuses and colors
     streamlit_status_text, streamlit_color = get_status(streamlit_status)
     slack_status_text, slack_color = get_status(slack_status)
+
+    # Get statuses and colors - with better error handling
+streamlit_status_text, streamlit_color = get_status(streamlit_status)
+slack_status_text, slack_color = get_status(slack_status)
+
+# Display debug info before status indicators
+st.write("Status information:")
+st.write(f"Streamlit status: {streamlit_status_text}")
+st.write(f"Slack status: {slack_status_text}")
+
+# Display status indicators with explicit text color
+col1, col2 = st.columns(2)
+with col1:
+    st.markdown(f"""
+    <div style="
+        display: flex;
+        align-items: center;
+        padding: 10px;
+        border-radius: 5px;
+        background-color: #f0f0f0;
+    ">
+        <div style="
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: {streamlit_color};
+            margin-right: 10px;
+        "></div>
+        <div style="color: #333333;">
+            <strong>Streamlit Bot:</strong> {streamlit_status_text}<br>
+            {streamlit_status.get("last_heartbeat").strftime("%Y-%m-%d %H:%M:%S") if streamlit_status and streamlit_status.get("last_heartbeat") else "No data"}
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
     # Display status indicators
     col1, col2 = st.columns(2)
