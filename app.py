@@ -4,8 +4,9 @@ import plotly.express as px
 from pymongo import MongoClient
 from datetime import datetime, timedelta
 import os
-import ssl
 from dotenv import load_dotenv
+import ssl
+import certifi
 
 # Load environment variables
 load_dotenv()
@@ -37,7 +38,7 @@ def get_mock_data():
                 "slack": {"bot_type": "slack", "last_heartbeat": datetime.now() - timedelta(minutes=15)}
             }
             
-            # Mock interaction data (same as before)
+            # Mock interaction data
             self.interactions = []
             for i in range(50):
                 hours_ago = i % 24
@@ -53,24 +54,29 @@ def get_mock_data():
     
     return MockDB()
 
-# Set up MongoDB connection with simpler SSL configuration
+# Database connection with custom SSL context
 def get_mongodb_connection():
     try:
-        # MongoDB connection string - using st.secrets if available
+        # Get MongoDB URI from secrets or use fallback
         mongo_uri = st.secrets.get("mongodb", {}).get("uri", None)
-        
-        # Fallback to environment variable if not in secrets
         if not mongo_uri:
-            mongo_uri = os.getenv("MONGO_URI", "mongodb+srv://br00kd0wnt0wn:XHZo54P7bqrVUIzj@ralphbot.nsyijw5.mongodb.net/?retryWrites=true&w=majority&appName=RalphBot")
-            st.sidebar.info("Using environment variable for MongoDB connection")
+            mongo_uri = "mongodb+srv://br00kd0wnt0wn:XHZo54P7bqrVUIzj@ralphbot.nsyijw5.mongodb.net/?retryWrites=true&w=majority&appName=RalphBot"
+            st.sidebar.info("Using hardcoded MongoDB connection")
         
-        # Connect with just one SSL option
+        # Create a custom SSL context with TLSv1.2
+        ssl_context = ssl.create_default_context(cafile=certifi.where())
+        ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE  # Warning: Less secure but helps with troubleshooting
+        
+        # Connect with custom SSL context
         client = MongoClient(
             mongo_uri,
-            serverSelectionTimeoutMS=5000,
-            connectTimeoutMS=10000,
-            socketTimeoutMS=10000,
-            tlsAllowInvalidCertificates=True  # Only using this one TLS parameter
+            serverSelectionTimeoutMS=10000,
+            connectTimeoutMS=30000,
+            socketTimeoutMS=30000,
+            ssl=True,
+            ssl_context=ssl_context
         )
         
         # Test the connection
@@ -79,23 +85,31 @@ def get_mongodb_connection():
         # Get database
         db = client.ralphbot_analytics
         
-        # Create MongoDBWrapper to handle MongoDB methods safely
-        class MongoDBWrapper:
+        st.sidebar.success("MongoDB connected successfully")
+        
+        # Wrapper class to handle database operations
+        class MongoWrapper:
             def __init__(self, db):
                 self.db = db
-                self.use_mock = False
+                self.bot_status = {}
+                
+                # Initialize bot status cache
+                streamlit_status = self.db.bot_status.find_one({"bot_type": "streamlit"})
+                slack_status = self.db.bot_status.find_one({"bot_type": "slack"})
+                
+                if streamlit_status:
+                    self.bot_status["streamlit"] = streamlit_status
+                else:
+                    self.bot_status["streamlit"] = {"bot_type": "streamlit", "last_heartbeat": datetime.now()}
+                    
+                if slack_status:
+                    self.bot_status["slack"] = slack_status
+                else:
+                    self.bot_status["slack"] = {"bot_type": "slack", "last_heartbeat": datetime.now() - timedelta(minutes=15)}
                 
             def get_bot_status(self, bot_type):
-                try:
-                    return self.db.bot_status.find_one({"bot_type": bot_type})
-                except Exception as e:
-                    st.sidebar.warning(f"Error getting bot status: {e}")
-                    # Return mock data structure
-                    if bot_type == "streamlit":
-                        return {"bot_type": "streamlit", "last_heartbeat": datetime.now()}
-                    else:
-                        return {"bot_type": "slack", "last_heartbeat": datetime.now() - timedelta(minutes=15)}
-            
+                return self.bot_status.get(bot_type)
+                
             def get_interactions(self, start_time, end_time, bot_type=None):
                 try:
                     query = {"timestamp": {"$gte": start_time, "$lte": end_time}}
@@ -104,16 +118,8 @@ def get_mongodb_connection():
                     
                     return list(self.db.interactions.find(query).sort("timestamp", -1).limit(50))
                 except Exception as e:
-                    st.sidebar.warning(f"Error getting interactions: {e}")
-                    # Return mock data filtered by date
-                    mock_db = get_mock_data()
-                    filtered = [i for i in mock_db.interactions 
-                               if start_time <= i["timestamp"] <= end_time]
-                    
-                    if bot_type and bot_type != "Both":
-                        filtered = [i for i in filtered if i["bot_type"] == bot_type.lower()]
-                    
-                    return sorted(filtered, key=lambda x: x["timestamp"], reverse=True)[:50]
+                    st.sidebar.warning(f"Error fetching interactions: {e}")
+                    return []
             
             def get_interaction_count(self, start_time, end_time, bot_type=None):
                 try:
@@ -123,16 +129,8 @@ def get_mongodb_connection():
                     
                     return self.db.interactions.count_documents(query)
                 except Exception as e:
-                    st.sidebar.warning(f"Error getting interaction count: {e}")
-                    # Count from mock data
-                    mock_db = get_mock_data()
-                    filtered = [i for i in mock_db.interactions 
-                               if start_time <= i["timestamp"] <= end_time]
-                    
-                    if bot_type:
-                        filtered = [i for i in filtered if i["bot_type"] == bot_type]
-                    
-                    return len(filtered)
+                    st.sidebar.warning(f"Error counting interactions: {e}")
+                    return 0
             
             def get_unique_users(self, start_time, end_time, bot_type=None):
                 try:
@@ -142,16 +140,8 @@ def get_mongodb_connection():
                     
                     return len(self.db.interactions.distinct("user_id", query))
                 except Exception as e:
-                    st.sidebar.warning(f"Error getting unique users: {e}")
-                    # Count from mock data
-                    mock_db = get_mock_data()
-                    filtered = [i for i in mock_db.interactions 
-                               if start_time <= i["timestamp"] <= end_time]
-                    
-                    if bot_type:
-                        filtered = [i for i in filtered if i["bot_type"] == bot_type]
-                    
-                    return len(set(i["user_id"] for i in filtered))
+                    st.sidebar.warning(f"Error counting unique users: {e}")
+                    return 0
             
             def get_average_response_time(self, start_time, end_time, bot_type=None):
                 try:
@@ -171,18 +161,7 @@ def get_mongodb_connection():
                         return result[0]["avg_time"]
                     return 0
                 except Exception as e:
-                    st.sidebar.warning(f"Error getting average response time: {e}")
-                    # Calculate from mock data
-                    mock_db = get_mock_data()
-                    filtered = [i for i in mock_db.interactions 
-                               if start_time <= i["timestamp"] <= end_time
-                               and "response_time_ms" in i]
-                    
-                    if bot_type:
-                        filtered = [i for i in filtered if i["bot_type"] == bot_type]
-                    
-                    if filtered:
-                        return sum(i["response_time_ms"] for i in filtered) / len(filtered)
+                    st.sidebar.warning(f"Error calculating average response time: {e}")
                     return 0
             
             def get_daily_activity(self, start_time, end_time):
@@ -209,28 +188,8 @@ def get_mongodb_connection():
                         ])
                     return pd.DataFrame()
                 except Exception as e:
-                    st.sidebar.warning(f"Error getting daily activity: {e}")
-                    # Create from mock data
-                    mock_db = get_mock_data()
-                    filtered = [i for i in mock_db.interactions 
-                               if start_time <= i["timestamp"] <= end_time]
-                    
-                    # Group by date and bot_type
-                    daily_data = {}
-                    for interaction in filtered:
-                        date_str = interaction["timestamp"].strftime("%Y-%m-%d")
-                        bot_type = interaction["bot_type"]
-                        key = (date_str, bot_type)
-                        
-                        if key not in daily_data:
-                            daily_data[key] = 0
-                        daily_data[key] += 1
-                    
-                    # Convert to DataFrame
-                    return pd.DataFrame([
-                        {"date": date, "bot_type": bot_type, "count": count}
-                        for (date, bot_type), count in daily_data.items()
-                    ])
+                    st.sidebar.warning(f"Error calculating daily activity: {e}")
+                    return pd.DataFrame()
             
             def get_top_queries(self, start_time, end_time, limit=10):
                 try:
@@ -249,25 +208,8 @@ def get_mongodb_connection():
                         ])
                     return pd.DataFrame()
                 except Exception as e:
-                    st.sidebar.warning(f"Error getting top queries: {e}")
-                    # Create from mock data
-                    mock_db = get_mock_data()
-                    filtered = [i for i in mock_db.interactions 
-                               if start_time <= i["timestamp"] <= end_time]
-                    
-                    # Count queries
-                    query_counts = {}
-                    for interaction in filtered:
-                        query = interaction["query"]
-                        if query not in query_counts:
-                            query_counts[query] = 0
-                        query_counts[query] += 1
-                    
-                    # Convert to DataFrame and sort
-                    return pd.DataFrame([
-                        {"query": query, "count": count}
-                        for query, count in query_counts.items()
-                    ]).sort_values("count", ascending=False).head(limit)
+                    st.sidebar.warning(f"Error calculating top queries: {e}")
+                    return pd.DataFrame()
             
             def get_response_times(self, start_time, end_time, bot_type):
                 try:
@@ -283,51 +225,129 @@ def get_mongodb_connection():
                         return [doc["response_time_ms"] for doc in result]
                     return []
                 except Exception as e:
-                    st.sidebar.warning(f"Error getting response times: {e}")
-                    # Get from mock data
-                    mock_db = get_mock_data()
-                    filtered = [i["response_time_ms"] for i in mock_db.interactions 
-                               if start_time <= i["timestamp"] <= end_time
-                               and i["bot_type"] == bot_type.lower()
-                               and "response_time_ms" in i]
-                    
-                    return filtered
+                    st.sidebar.warning(f"Error fetching response times: {e}")
+                    return []
         
-        st.sidebar.success("MongoDB connected successfully")
-        return MongoDBWrapper(db)
+        return MongoWrapper(db)
         
     except Exception as e:
         st.sidebar.error(f"MongoDB connection error: {str(e)}")
-        st.sidebar.info("Using mock data instead")
         return None
 
-# Try to connect to MongoDB
-mongo_db = get_mongodb_connection()
-
-# Use mock data if MongoDB connection failed
-if not mongo_db:
+# Attempt to connect to MongoDB, fall back to mock data if needed
+try:
+    mongodb = get_mongodb_connection()
+    if mongodb:
+        db = mongodb
+        st.sidebar.success("Using real MongoDB data")
+        using_mock = False
+    else:
+        mock_db = get_mock_data()
+        st.sidebar.warning("Using mock data (MongoDB connection failed)")
+        using_mock = True
+        
+        # Create a wrapper for mock data with the same interface
+        class MockWrapper:
+            def __init__(self, mock_db):
+                self.mock_db = mock_db
+            
+            def get_bot_status(self, bot_type):
+                return self.mock_db.bot_status.get(bot_type)
+            
+            def get_interactions(self, start_time, end_time, bot_type=None):
+                filtered = [i for i in self.mock_db.interactions 
+                           if start_time <= i["timestamp"] <= end_time]
+                
+                if bot_type and bot_type != "Both":
+                    filtered = [i for i in filtered if i["bot_type"] == bot_type.lower()]
+                
+                return sorted(filtered, key=lambda x: x["timestamp"], reverse=True)[:50]
+            
+            def get_interaction_count(self, start_time, end_time, bot_type=None):
+                filtered = [i for i in self.mock_db.interactions 
+                           if start_time <= i["timestamp"] <= end_time]
+                
+                if bot_type:
+                    filtered = [i for i in filtered if i["bot_type"] == bot_type]
+                
+                return len(filtered)
+            
+            def get_unique_users(self, start_time, end_time, bot_type=None):
+                filtered = [i for i in self.mock_db.interactions 
+                           if start_time <= i["timestamp"] <= end_time]
+                
+                if bot_type:
+                    filtered = [i for i in filtered if i["bot_type"] == bot_type]
+                
+                return len(set(i["user_id"] for i in filtered))
+            
+            def get_average_response_time(self, start_time, end_time, bot_type=None):
+                filtered = [i for i in self.mock_db.interactions 
+                           if start_time <= i["timestamp"] <= end_time
+                           and "response_time_ms" in i]
+                
+                if bot_type:
+                    filtered = [i for i in filtered if i["bot_type"] == bot_type]
+                
+                if filtered:
+                    return sum(i["response_time_ms"] for i in filtered) / len(filtered)
+                return 0
+            
+            def get_daily_activity(self, start_time, end_time):
+                filtered = [i for i in self.mock_db.interactions 
+                           if start_time <= i["timestamp"] <= end_time]
+                
+                # Group by date and bot_type
+                daily_data = {}
+                for interaction in filtered:
+                    date_str = interaction["timestamp"].strftime("%Y-%m-%d")
+                    bot_type = interaction["bot_type"]
+                    key = (date_str, bot_type)
+                    
+                    if key not in daily_data:
+                        daily_data[key] = 0
+                    daily_data[key] += 1
+                
+                # Convert to DataFrame
+                return pd.DataFrame([
+                    {"date": date, "bot_type": bot_type, "count": count}
+                    for (date, bot_type), count in daily_data.items()
+                ])
+            
+            def get_top_queries(self, start_time, end_time, limit=10):
+                filtered = [i for i in self.mock_db.interactions 
+                           if start_time <= i["timestamp"] <= end_time]
+                
+                # Count queries
+                query_counts = {}
+                for interaction in filtered:
+                    query = interaction["query"]
+                    if query not in query_counts:
+                        query_counts[query] = 0
+                    query_counts[query] += 1
+                
+                # Convert to DataFrame and sort
+                return pd.DataFrame([
+                    {"query": query, "count": count}
+                    for query, count in query_counts.items()
+                ]).sort_values("count", ascending=False).head(limit)
+            
+            def get_response_times(self, start_time, end_time, bot_type):
+                filtered = [i["response_time_ms"] for i in self.mock_db.interactions 
+                           if start_time <= i["timestamp"] <= end_time
+                           and i["bot_type"] == bot_type.lower()
+                           and "response_time_ms" in i]
+                
+                return filtered
+        
+        db = MockWrapper(mock_db)
+except Exception as e:
+    st.sidebar.error(f"Error initializing data: {e}")
     mock_db = get_mock_data()
-    
-    # Create a wrapper with the same methods as MongoDBWrapper
-    class MockDBWrapper:
-        def __init__(self, mock_db):
-            self.mock_db = mock_db
-        
-        def get_bot_status(self, bot_type):
-            return self.mock_db.bot_status.get(bot_type, 
-                   {"bot_type": bot_type, "last_heartbeat": datetime.now()})
-        
-        # Implement other methods like in the MongoDBWrapper class
-        # with mock data instead of MongoDB queries
-        # ...
-    
-    # Use mock data instead
-    db = MockDBWrapper(mock_db)
-    st.sidebar.info("Using mock data for demonstration")
-else:
-    db = mongo_db
+    db = MockWrapper(mock_db)
+    using_mock = True
 
-# Authentication (same as before)
+# Authentication
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
@@ -344,10 +364,19 @@ if not st.session_state.authenticated:
     st.write("Please authenticate to view the dashboard")
     authenticate()
 else:
-    # Main dashboard (modified to use db wrapper)
+    # Main dashboard
     st.title("RalphBot Analytics Dashboard")
     
-    # Date range selector (same as before)
+    # Show mock data warning if using mock data
+    if using_mock:
+        st.warning("""
+            ⚠️ **Using Mock Data** ⚠️  
+            
+            The dashboard is currently using simulated data because MongoDB connection failed.
+            Check the sidebar for error details.
+        """)
+    
+    # Date range selector
     col1, col2 = st.columns(2)
     with col1:
         start_date = st.date_input("Start date", datetime.now() - timedelta(days=7))
@@ -431,7 +460,7 @@ else:
         </div>
         """, unsafe_allow_html=True)
     
-    # Auto-refresh (same as before)
+    # Auto-refresh
     st.sidebar.title("Dashboard Controls")
     auto_refresh = st.sidebar.checkbox("Auto refresh", value=True)
     
@@ -495,6 +524,8 @@ else:
                 labels={"count": "Number of Interactions", "date": "Date", "bot_type": "Bot Type"}
             )
             st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No daily activity data available for the selected period")
     
     with tab2:
         st.header("Recent Conversations")
@@ -532,6 +563,8 @@ else:
                 labels={"count": "Number of Times Asked", "query": "Query"}
             )
             st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No query data available for the selected period")
         
         # Response time distribution
         st.subheader("Response Time Distribution")
