@@ -1,7 +1,6 @@
 streamlit
 pandas
 plotly
-pymongo==3.11.0
+requests
 python-dotenv
-certifi==2020.12.5
-dnspython==2.0.0
+gunicorn
