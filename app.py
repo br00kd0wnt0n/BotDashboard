@@ -1,19 +1,14 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from pymongo import MongoClient
 from datetime import datetime, timedelta
 import os
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
 
 # Set page config
 st.set_page_config(
     page_title="RalphBot Analytics Dashboard",
     page_icon="📊",
-    layout="wide" 
+    layout="wide"
 )
 
 # Apply custom styling
@@ -21,109 +16,40 @@ st.markdown("""
 <style>
     .main {background-color: #f5f5f5;}
     div[data-testid="stHeader"] {background-color: #E90080;}
+    p, div {color: #333333;} /* Dark gray text */
+    h1, h2, h3 {color: #222222;} /* Even darker text for headings */
 </style>
 """, unsafe_allow_html=True)
 
-# Database connection with better error handling
-@st.cache_resource
-def get_database_connection():
-    try:
-        # Get MongoDB URI from secrets or use fallback
-        if "mongodb" in st.secrets:
-            mongo_uri = st.secrets["mongodb"]["uri"]
-        else:
-            mongo_uri = "mongodb+srv://br00kd0wnt0n:XHZo54P7bqrVUIzj@ralphbot.nsyijw5.mongodb.net/?retryWrites=true&w=majority&appName=RalphBot"
-            st.sidebar.warning("Using hardcoded database connection")
-        
-        # Connect with longer timeout and retry options
-        client = MongoClient(
-            mongo_uri,
-            serverSelectionTimeoutMS=10000,  # 10 second timeout
-            connectTimeoutMS=20000,
-            socketTimeoutMS=20000,
-            retryWrites=True,
-            w="majority"
-        )
-        
-        # Test connection
-        client.admin.command('ping')
-        st.sidebar.success("MongoDB connected successfully")
-        return client.ralphbot_analytics
-    except Exception as e:
-        st.sidebar.error(f"Database connection error: {str(e)}")
-        # Return None or a dummy database for UI testing
-        return None
-
-# After the database connection
-if db is None:
-    st.error("Could not connect to the database. Using mock data for demonstration.")
-    # Create mock data
-    class MockCollection:
-        def __init__(self, data=None):
-            self.data = data or []
-        
-        def find_one(self, query=None):
-            if not self.data:
-                return None
-            return self.data[0]
-            
-        def find(self, query=None):
-            return self.data
-            
-        def count_documents(self, query=None):
-            return len(self.data)
-            
-        def distinct(self, field, query=None):
-            return list(set(d.get(field) for d in self.data if field in d))
-            
-        def aggregate(self, pipeline):
-            # Simple mock for aggregation
-            return [{"_id": "streamlit", "avg_time": 500}, {"_id": "slack", "avg_time": 700}]
-    
-    # Create mock database
+# Mock data function
+def get_mock_data():
+    # Create a class to simulate the database
     class MockDB:
         def __init__(self):
-            self.bot_status = MockCollection([
-                {"bot_type": "streamlit", "last_heartbeat": datetime.now()},
-                {"bot_type": "slack", "last_heartbeat": datetime.now() - timedelta(minutes=10)}
-            ])
-            self.interactions = MockCollection([
-                {"timestamp": datetime.now(), "user_id": "user1", "query": "Sample query", 
-                 "response": "Sample response", "bot_type": "streamlit", "response_time_ms": 500},
-                {"timestamp": datetime.now() - timedelta(hours=1), "user_id": "user2", 
-                 "query": "Another query", "response": "Another response", "bot_type": "slack", 
-                 "response_time_ms": 700}
-            ])
+            # Mock bot status data
+            self.bot_status = {
+                "streamlit": {"bot_type": "streamlit", "last_heartbeat": datetime.now()},
+                "slack": {"bot_type": "slack", "last_heartbeat": datetime.now() - timedelta(minutes=15)}
+            }
+            
+            # Mock interaction data
+            self.interactions = []
+            for i in range(50):
+                hours_ago = i % 24
+                days_ago = i // 24
+                self.interactions.append({
+                    "timestamp": datetime.now() - timedelta(days=days_ago, hours=hours_ago),
+                    "user_id": f"user{i%10}",
+                    "query": f"Sample query {i}",
+                    "response": f"Sample response {i}",
+                    "bot_type": "streamlit" if i % 3 == 0 else "slack",
+                    "response_time_ms": 500 + (i * 10)
+                })
     
-    db = MockDB()
+    return MockDB()
 
-# Add debug information
-if db:
-    # Display DB connection info
-    st.sidebar.info("Connected to MongoDB")
-    
-    # Check if status collections exist
-    status_count = db.bot_status.count_documents({})
-    st.sidebar.write(f"Bot status documents: {status_count}")
-    
-    # List all status documents for debugging
-    all_statuses = list(db.bot_status.find({}))
-    with st.sidebar.expander("All Status Documents"):
-        st.write(all_statuses)
-else:
-    st.sidebar.warning("Using dummy data (no database connection)")
-    # Create dummy data for UI testing
-    streamlit_status = {"bot_type": "streamlit", "last_heartbeat": datetime.now()}
-    slack_status = {"bot_type": "slack", "last_heartbeat": datetime.now() - timedelta(minutes=10)}
-
-# Database connection
-@st.cache_resource
-def get_database_connection():
-    mongo_uri = os.getenv("mongodb+srv://br00kd0wnt0n:XHZo54P7bqrVUIzj@ralphbot.nsyijw5.mongodb.net/?retryWrites=true&w=majority&appName=RalphBot")
-    client = MongoClient(mongo_uri)
-    return client.ralphbot_analytics
-
-db = get_database_connection()
+# Get mock data
+db = get_mock_data()
 
 # Authentication
 if 'authenticated' not in st.session_state:
@@ -131,7 +57,7 @@ if 'authenticated' not in st.session_state:
 
 def authenticate():
     password = st.sidebar.text_input("Enter dashboard password", type="password")
-    if password == os.getenv("DASHBOARD_PASSWORD", "ralphbot123"):
+    if password == "ralphbot123":  # Hardcoded for demonstration
         st.session_state.authenticated = True
     else:
         st.sidebar.error("Invalid password")
@@ -158,93 +84,69 @@ else:
     # Bot Status
     st.header("Bot Status")
     
-# Get current status with error handling
-try:
-    streamlit_status = db.bot_status.find_one({"bot_type": "streamlit"})
-    slack_status = db.bot_status.find_one({"bot_type": "slack"})
-except Exception as e:
-    st.error(f"Error retrieving status: {str(e)}")
-    # Create fallback status
-    streamlit_status = {"bot_type": "streamlit", "last_heartbeat": datetime.now()}
-    slack_status = {"bot_type": "slack", "last_heartbeat": datetime.now()}
-    
     # Calculate status based on last heartbeat
-    def get_status(heartbeat_doc):
-        if not heartbeat_doc:
-            return "Unknown", "gray"
-            
-        last_heartbeat = heartbeat_doc.get("last_heartbeat")
-        if not last_heartbeat:
+    def get_status(heartbeat_time):
+        if not heartbeat_time:
             return "Unknown", "gray"
             
         # Consider offline if no heartbeat in last 5 minutes
-        time_diff = datetime.now() - last_heartbeat
+        time_diff = datetime.now() - heartbeat_time
         if time_diff.total_seconds() > 300:  # 5 minutes
             return "Offline", "red"
         else:
             return "Online", "green"
     
     # Get statuses and colors
-    streamlit_status_text, streamlit_color = get_status(streamlit_status)
-    slack_status_text, slack_color = get_status(slack_status)
-
-    # Get statuses and colors - with better error handling
-streamlit_status_text, streamlit_color = get_status(streamlit_status)
-slack_status_text, slack_color = get_status(slack_status)
-
-# Display debug info before status indicators
-st.write("Status information:")
-st.write(f"Streamlit status: {streamlit_status_text}")
-st.write(f"Slack status: {slack_status_text}")
-
-# Display status indicators with explicit text color
-col1, col2 = st.columns(2)
-with col1:
-    st.markdown(f"""
-    <div style="
-        display: flex;
-        align-items: center;
-        padding: 10px;
-        border-radius: 5px;
-        background-color: #f0f0f0;
-    ">
-        <div style="
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background-color: {streamlit_color};
-            margin-right: 10px;
-        "></div>
-        <div style="color: #333333;">
-            <strong>Streamlit Bot:</strong> {streamlit_status_text}<br>
-            {streamlit_status.get("last_heartbeat").strftime("%Y-%m-%d %H:%M:%S") if streamlit_status and streamlit_status.get("last_heartbeat") else "No data"}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    streamlit_status_text, streamlit_color = get_status(db.bot_status["streamlit"]["last_heartbeat"])
+    slack_status_text, slack_color = get_status(db.bot_status["slack"]["last_heartbeat"])
     
     # Display status indicators
     col1, col2 = st.columns(2)
     with col1:
         st.markdown(f"""
-    <div class="status-box">
-        <div class="status-indicator" style="background-color: {streamlit_color};"></div>
-        <div>
-            <strong>Streamlit Bot:</strong> {streamlit_status_text}<br>
-            {streamlit_status.get("last_heartbeat").strftime("%Y-%m-%d %H:%M:%S") if streamlit_status and streamlit_status.get("last_heartbeat") else "No data"}
+        <div style="
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+        ">
+            <div style="
+                width: 20px;
+                height: 20px;
+                border-radius: 50%;
+                background-color: {streamlit_color};
+                margin-right: 10px;
+            "></div>
+            <div style="color: #333333;">
+                <strong>Streamlit Bot:</strong> {streamlit_status_text}<br>
+                {db.bot_status["streamlit"]["last_heartbeat"].strftime("%Y-%m-%d %H:%M:%S")}
+            </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
-        
+        """, unsafe_allow_html=True)
+    
     with col2:
         st.markdown(f"""
-    <div class="status-box">
-        <div class="status-indicator" style="background-color: {streamlit_color};"></div>
-        <div>
-            <strong>Streamlit Bot:</strong> {streamlit_status_text}<br>
-            {streamlit_status.get("last_heartbeat").strftime("%Y-%m-%d %H:%M:%S") if streamlit_status and streamlit_status.get("last_heartbeat") else "No data"}
+        <div style="
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #f0f0f0;
+        ">
+            <div style="
+                width: 20px;
+                height: 20px;
+                border-radius: 50%;
+                background-color: {slack_color};
+                margin-right: 10px;
+            "></div>
+            <div style="color: #333333;">
+                <strong>Slack Bot:</strong> {slack_status_text}<br>
+                {db.bot_status["slack"]["last_heartbeat"].strftime("%Y-%m-%d %H:%M:%S")}
+            </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
     
     # Auto-refresh
     st.sidebar.title("Dashboard Controls")
@@ -270,33 +172,21 @@ with col1:
     with tab1:
         st.header("Overview Metrics")
         
-        # Fetch data
-        total_streamlit = db.interactions.count_documents({
-            "bot_type": "streamlit",
-            "timestamp": {"$gte": start_datetime, "$lte": end_datetime}
-        })
+        # Filter interactions based on date range
+        filtered_interactions = [
+            interaction for interaction in db.interactions
+            if start_datetime <= interaction["timestamp"] <= end_datetime
+        ]
         
-        total_slack = db.interactions.count_documents({
-            "bot_type": "slack",
-            "timestamp": {"$gte": start_datetime, "$lte": end_datetime}
-        })
+        # Calculate metrics
+        total_streamlit = sum(1 for i in filtered_interactions if i["bot_type"] == "streamlit")
+        total_slack = sum(1 for i in filtered_interactions if i["bot_type"] == "slack")
         
-        unique_streamlit = db.interactions.distinct("user_id", {
-            "bot_type": "streamlit",
-            "timestamp": {"$gte": start_datetime, "$lte": end_datetime}
-        })
+        unique_streamlit = len(set(i["user_id"] for i in filtered_interactions if i["bot_type"] == "streamlit"))
+        unique_slack = len(set(i["user_id"] for i in filtered_interactions if i["bot_type"] == "slack"))
         
-        unique_slack = db.interactions.distinct("user_id", {
-            "bot_type": "slack",
-            "timestamp": {"$gte": start_datetime, "$lte": end_datetime}
-        })
-        
-        avg_response_time = db.interactions.aggregate([
-            {"$match": {"timestamp": {"$gte": start_datetime, "$lte": end_datetime}}},
-            {"$group": {"_id": "$bot_type", "avg_time": {"$avg": "$response_time_ms"}}}
-        ])
-        
-        avg_times = {doc["_id"]: doc["avg_time"] for doc in avg_response_time}
+        avg_streamlit_time = sum(i["response_time_ms"] for i in filtered_interactions if i["bot_type"] == "streamlit") / max(1, total_streamlit)
+        avg_slack_time = sum(i["response_time_ms"] for i in filtered_interactions if i["bot_type"] == "slack") / max(1, total_slack)
         
         # Display metrics
         col1, col2, col3, col4 = st.columns(4)
@@ -305,35 +195,35 @@ with col1:
         with col2:
             st.metric("Slack Interactions", total_slack)
         with col3:
-            st.metric("Unique Streamlit Users", len(unique_streamlit))
+            st.metric("Unique Streamlit Users", unique_streamlit)
         with col4:
-            st.metric("Unique Slack Users", len(unique_slack))
+            st.metric("Unique Slack Users", unique_slack)
         
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("Avg. Streamlit Response Time", f"{int(avg_times.get('streamlit', 0))}ms")
+            st.metric("Avg. Streamlit Response Time", f"{int(avg_streamlit_time)}ms")
         with col2:
-            st.metric("Avg. Slack Response Time", f"{int(avg_times.get('slack', 0))}ms")
+            st.metric("Avg. Slack Response Time", f"{int(avg_slack_time)}ms")
         
         # Daily activity chart
-        daily_data = list(db.interactions.aggregate([
-            {"$match": {"timestamp": {"$gte": start_datetime, "$lte": end_datetime}}},
-            {"$group": {
-                "_id": {
-                    "date": {"$dateToString": {"format": "%Y-%m-%d", "date": "$timestamp"}},
-                    "bot_type": "$bot_type"
-                },
-                "count": {"$sum": 1}
-            }},
-            {"$sort": {"_id.date": 1}}
-        ]))
-        
-        if daily_data:
-            daily_df = pd.DataFrame([
-                {"date": item["_id"]["date"], "bot_type": item["_id"]["bot_type"], "count": item["count"]}
-                for item in daily_data
-            ])
+        # Group interactions by date and bot type
+        daily_data = {}
+        for interaction in filtered_interactions:
+            date_str = interaction["timestamp"].strftime("%Y-%m-%d")
+            bot_type = interaction["bot_type"]
+            key = (date_str, bot_type)
             
+            if key not in daily_data:
+                daily_data[key] = 0
+            daily_data[key] += 1
+        
+        # Convert to DataFrame
+        daily_df = pd.DataFrame([
+            {"date": date, "bot_type": bot_type, "count": count}
+            for (date, bot_type), count in daily_data.items()
+        ])
+        
+        if not daily_df.empty:
             fig = px.line(
                 daily_df, 
                 x="date", 
@@ -349,21 +239,23 @@ with col1:
         
         bot_type = st.selectbox("Select Bot", ["Both", "Streamlit", "Slack"])
         
-        # Query filter
-        filter_query = {"timestamp": {"$gte": start_datetime, "$lte": end_datetime}}
-        if bot_type != "Both":
-            filter_query["bot_type"] = bot_type.lower()
+        # Filter conversations
+        conversations = []
+        for interaction in db.interactions:
+            if start_datetime <= interaction["timestamp"] <= end_datetime:
+                if bot_type == "Both" or interaction["bot_type"] == bot_type.lower():
+                    conversations.append(interaction)
         
-        # Get conversations
-        conversations = list(db.interactions.find(
-            filter_query, 
-            {"_id": 0, "timestamp": 1, "user_id": 1, "query": 1, "response": 1, "bot_type": 1}
-        ).sort("timestamp", -1).limit(50))
+        # Sort by timestamp (newest first)
+        conversations.sort(key=lambda x: x["timestamp"], reverse=True)
+        
+        # Limit to 50
+        conversations = conversations[:50]
         
         # Display conversations
         if conversations:
             for conv in conversations:
-                with st.expander(f"{conv['timestamp'].strftime('%Y-%m-%d %H:%M')} - {conv['bot_type'].upper()} - User: {conv['user_id'][:8]}"):
+                with st.expander(f"{conv['timestamp'].strftime('%Y-%m-%d %H:%M')} - {conv['bot_type'].upper()} - User: {conv['user_id']}"):
                     st.write("**Query:**")
                     st.write(conv["query"])
                     st.write("**Response:**")
@@ -374,17 +266,22 @@ with col1:
     with tab3:
         st.header("Advanced Analysis")
         
-        # Top queries
-        top_queries = list(db.interactions.aggregate([
-            {"$match": {"timestamp": {"$gte": start_datetime, "$lte": end_datetime}}},
-            {"$group": {"_id": "$query", "count": {"$sum": 1}}},
-            {"$sort": {"count": -1}},
-            {"$limit": 10}
-        ]))
+        # Count queries
+        query_counts = {}
+        for interaction in filtered_interactions:
+            query = interaction["query"]
+            if query not in query_counts:
+                query_counts[query] = 0
+            query_counts[query] += 1
         
-        if top_queries:
+        # Convert to DataFrame and sort
+        query_df = pd.DataFrame([
+            {"query": query, "count": count}
+            for query, count in query_counts.items()
+        ]).sort_values("count", ascending=False).head(10)
+        
+        if not query_df.empty:
             st.subheader("Most Common Queries")
-            query_df = pd.DataFrame([{"query": item["_id"], "count": item["count"]} for item in top_queries])
             fig = px.bar(
                 query_df, 
                 x="count", 
@@ -399,19 +296,15 @@ with col1:
         st.subheader("Response Time Distribution")
         bot_selector = st.radio("Select Bot Type", ["Streamlit", "Slack"], horizontal=True)
         
-        response_times = list(db.interactions.find(
-            {
-                "bot_type": bot_selector.lower(),
-                "timestamp": {"$gte": start_datetime, "$lte": end_datetime},
-                "response_time_ms": {"$exists": True, "$ne": 0}
-            },
-            {"response_time_ms": 1}
-        ))
+        response_times = [
+            interaction["response_time_ms"]
+            for interaction in filtered_interactions
+            if interaction["bot_type"] == bot_selector.lower()
+        ]
         
         if response_times:
-            times = [doc["response_time_ms"] for doc in response_times]
             fig = px.histogram(
-                times, 
+                response_times, 
                 nbins=20,
                 title=f"{bot_selector} Response Time Distribution (ms)",
                 labels={"value": "Response Time (ms)", "count": "Number of Interactions"}
@@ -423,32 +316,3 @@ with col1:
 # Add footer
 st.markdown("---")
 st.markdown("RalphBot Analytics Dashboard | Internal Use Only")
-
-# Apply custom styling
-st.markdown("""
-<style>
-    .main {background-color: #f5f5f5;}
-    div[data-testid="stHeader"] {background-color: #E90080;}
-    
-    /* Add text color rules to ensure visibility */
-    p, div {color: #333333;} /* Dark gray text */
-    h1, h2, h3 {color: #222222;} /* Even darker text for headings */
-    
-    /* Status indicators styling fix */
-    .status-box {
-        display: flex;
-        align-items: center;
-        padding: 10px;
-        border-radius: 5px;
-        background-color: #f0f0f0;
-        color: #333333;
-        margin-bottom: 10px;
-    }
-    .status-indicator {
-        width: 20px;
-        height: 20px;
-        border-radius: 50%;
-        margin-right: 10px;
-    }
-</style>
-""", unsafe_allow_html=True)
