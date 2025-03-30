@@ -57,7 +57,7 @@ def get_mock_data():
 # Database connection with custom SSL context
 def get_mongodb_connection():
    # Inside your get_mongodb_connection() function
-try:
+    try:
     # Get MongoDB URI from secrets or use fallback
     mongo_uri = st.secrets.get("mongodb", {}).get("uri", None)
     if not mongo_uri:
