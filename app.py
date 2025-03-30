@@ -1,4 +1,4 @@
-# streamlit_app.py - Your updated Streamlit dashboard
+# streamlit_app.py - RalphBot Analytics Dashboard
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -63,16 +63,17 @@ def get_mock_data():
     
     return MockDB()
 
-import os
-import streamlit as st
-
-# Authentication
+# Authentication state
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
 def authenticate():
-    # Use st.text_input inside the function to ensure it's always defined
-    password_input = st.sidebar.text_input("Enter dashboard password", type="password", key="dashboard_password")
+    # Password input
+    password_input = st.sidebar.text_input(
+        "Enter dashboard password", 
+        type="password", 
+        key="dashboard_password"
+    )
     
     # Get password from environment or secrets
     dashboard_pwd = os.environ.get('DASHBOARD_PASSWORD', 
@@ -81,7 +82,7 @@ def authenticate():
     # Authentication logic
     if password_input == dashboard_pwd:
         st.session_state.authenticated = True
-    elif password_input:  # Only show error if something was typed
+    elif password_input:
         st.sidebar.error("Invalid password")
 
 # Main authentication flow
@@ -90,16 +91,7 @@ if not st.session_state.authenticated:
     st.write("Please authenticate to view the dashboard")
     authenticate()
 else:
-    # Rest of your existing dashboard code starts here
-    # (The entire existing code block remains the same)
-    
-    # Debug prints (remove in production)
-    st.sidebar.write(f"Input length: {len(password)}")
-    st.sidebar.write(f"Stored pwd length: {len(dashboard_pwd)}")
-    st.sidebar.write(f"Input: '{password}'")
-    st.sidebar.write(f"Stored: '{dashboard_pwd}'")
-
-    # Main dashboard
+    # Main dashboard content starts here
     st.title("RalphBot Analytics Dashboard")
     
     # Date range selector
@@ -379,57 +371,3 @@ else:
                 query_counts[query] += 1
             
             # Convert to list format
-            top_queries = [
-                {"query": query, "count": count}
-                for query, count in sorted(query_counts.items(), key=lambda x: x[1], reverse=True)[:10]
-            ]
-        
-        # Convert to DataFrame for plotting
-        if top_queries:
-            query_df = pd.DataFrame(top_queries)
-            
-            st.subheader("Most Common Queries")
-            fig = px.bar(
-                query_df, 
-                x="count", 
-                y="query", 
-                orientation='h',
-                title="Top 10 Queries",
-                labels={"count": "Number of Times Asked", "query": "Query"}
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No query data available for the selected period")
-        
-        # Response time distribution
-        st.subheader("Response Time Distribution")
-        bot_selector = st.radio("Select Bot Type", ["Streamlit", "Slack"], horizontal=True)
-        
-        # Fetch response times from API
-        response_times_params = date_params.copy()
-        response_times_params['bot_type'] = bot_selector
-        response_times = fetch_api_data('response_times', response_times_params)
-        
-        # Use mock data if API call fails
-        if not response_times:
-            mock_db = get_mock_data()
-            filtered = [i for i in mock_db.interactions 
-                       if start_datetime <= i["timestamp"] <= end_datetime
-                       and i["bot_type"] == bot_selector.lower()]
-            
-            response_times = [i["response_time_ms"] for i in filtered]
-        
-        if response_times:
-            fig = px.histogram(
-                response_times, 
-                nbins=20,
-                title=f"{bot_selector} Response Time Distribution (ms)",
-                labels={"value": "Response Time (ms)", "count": "Number of Interactions"}
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.write("No response time data available for the selected period")
-
-# Add footer
-st.markdown("---")
-st.markdown("RalphBot Analytics Dashboard | Internal Use Only")
