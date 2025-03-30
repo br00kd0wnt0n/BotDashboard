@@ -57,20 +57,30 @@ def get_mock_data():
 # Database connection with TLS parameters
 def get_mongodb_connection():
     try:
-        # Get MongoDB URI from secrets or use fallback
-        mongo_uri = st.secrets.get("mongodb", {}).get("uri", None)
-        if not mongo_uri:
-            mongo_uri = "mongodb+srv://br00kd0wnt0wn:XHZo54P7bqrVUIzj@ralphbot.nsyijw5.mongodb.net/?retryWrites=true&w=majority&appName=RalphBot"
-            st.sidebar.info("Using hardcoded MongoDB connection")
+        # Use a direct connection string without SRV format
+        mongo_uri = "mongodb://br00kd0wnt0wn:XHZo54P7bqrVUIzj@ac-cb7jrqo-shard-00-00.nsyijw5.mongodb.net:27017,ac-cb7jrqo-shard-00-01.nsyijw5.mongodb.net:27017,ac-cb7jrqo-shard-00-02.nsyijw5.mongodb.net:27017/ralphbot_analytics?replicaSet=atlas-e0jjn5-shard-0&authSource=admin"
         
-        # Connect with TLS parameters
+        # Import necessary SSL modules
+        import ssl
+        import certifi
+        
+        # Create a custom SSL context with lower security for testing
+        ssl_context = ssl.create_default_context(cafile=certifi.where())
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        
+        # Force TLS version 1.2
+        ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
+        ssl_context.maximum_version = ssl.TLSVersion.TLSv1_2
+        
+        # Connect with custom SSL context
         client = MongoClient(
             mongo_uri,
             serverSelectionTimeoutMS=10000,
             connectTimeoutMS=30000,
             socketTimeoutMS=30000,
-            tls=True,  # Modern way to specify TLS connection
-            tlsAllowInvalidCertificates=True  # Skip certificate validation
+            ssl=True,
+            ssl_context=ssl_context
         )
         
         # Test the connection
