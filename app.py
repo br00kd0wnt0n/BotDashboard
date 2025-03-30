@@ -56,36 +56,33 @@ def get_mock_data():
 
 # Database connection with custom SSL context
 def get_mongodb_connection():
-    try:
-        # Get MongoDB URI from secrets or use fallback
-        mongo_uri = st.secrets.get("mongodb", {}).get("uri", None)
-        if not mongo_uri:
-            mongo_uri = "mongodb+srv://br00kd0wnt0wn:XHZo54P7bqrVUIzj@ralphbot.nsyijw5.mongodb.net/?retryWrites=true&w=majority&appName=RalphBot"
-            st.sidebar.info("Using hardcoded MongoDB connection")
-        
-        # Create a custom SSL context with TLSv1.2
-        ssl_context = ssl.create_default_context(cafile=certifi.where())
-        ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl.CERT_NONE  # Warning: Less secure but helps with troubleshooting
-        
-        # Connect with custom SSL context
-        client = MongoClient(
-            mongo_uri,
-            serverSelectionTimeoutMS=10000,
-            connectTimeoutMS=30000,
-            socketTimeoutMS=30000,
-            ssl=True,
-            ssl_context=ssl_context
-        )
-        
-        # Test the connection
-        client.admin.command('ping')
-        
-        # Get database
-        db = client.ralphbot_analytics
-        
-        st.sidebar.success("MongoDB connected successfully")
+   # Inside your get_mongodb_connection() function
+try:
+    # Get MongoDB URI from secrets or use fallback
+    mongo_uri = st.secrets.get("mongodb", {}).get("uri", None)
+    if not mongo_uri:
+        mongo_uri = "mongodb+srv://br00kd0wnt0wn:XHZo54P7bqrVUIzj@ralphbot.nsyijw5.mongodb.net/?retryWrites=true&w=majority&appName=RalphBot"
+        st.sidebar.info("Using hardcoded MongoDB connection")
+    
+    # Connect with TLS parameters
+    client = MongoClient(
+        mongo_uri,
+        serverSelectionTimeoutMS=10000,
+        connectTimeoutMS=30000,
+        socketTimeoutMS=30000,
+        tls=True,  # Modern way to specify TLS connection (equivalent to --tls)
+        tlsAllowInvalidCertificates=True  # Skip certificate validation (equivalent to --tlsAllowInvalidCertificates)
+    )
+    
+    # Test the connection
+    client.admin.command('ping')
+    
+    # Get database
+    db = client.ralphbot_analytics
+    
+    st.sidebar.success("MongoDB connected successfully")
+    
+    # Continue with the rest of your code...
         
         # Wrapper class to handle database operations
         class MongoWrapper:
