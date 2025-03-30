@@ -53,7 +53,7 @@ def get_mock_data():
     
     return MockDB()
 
-# Set up MongoDB connection with proper error handling and compatible SSL configuration
+# Set up MongoDB connection with simpler SSL configuration
 def get_mongodb_connection():
     try:
         # MongoDB connection string - using st.secrets if available
@@ -64,15 +64,13 @@ def get_mongodb_connection():
             mongo_uri = os.getenv("MONGO_URI", "mongodb+srv://br00kd0wnt0wn:XHZo54P7bqrVUIzj@ralphbot.nsyijw5.mongodb.net/?retryWrites=true&w=majority&appName=RalphBot")
             st.sidebar.info("Using environment variable for MongoDB connection")
         
-        # Connect with compatible SSL configuration
-        # Using newer PyMongo parameter names
+        # Connect with just one SSL option
         client = MongoClient(
             mongo_uri,
             serverSelectionTimeoutMS=5000,
             connectTimeoutMS=10000,
             socketTimeoutMS=10000,
-            tlsAllowInvalidCertificates=True,  # This replaces ssl_cert_reqs=CERT_NONE
-            tlsInsecure=True  # For even less strict certificate validation
+            tlsAllowInvalidCertificates=True  # Only using this one TLS parameter
         )
         
         # Test the connection
