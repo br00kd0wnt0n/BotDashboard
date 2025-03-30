@@ -13,7 +13,7 @@ load_dotenv()
 st.set_page_config(
     page_title="RalphBot Analytics Dashboard",
     page_icon="📊",
-    layout="wide"
+    layout="wide" 
 )
 
 # Apply custom styling
