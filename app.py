@@ -315,3 +315,32 @@ else:
 # Add footer
 st.markdown("---")
 st.markdown("RalphBot Analytics Dashboard | Internal Use Only")
+
+# Apply custom styling
+st.markdown("""
+<style>
+    .main {background-color: #f5f5f5;}
+    div[data-testid="stHeader"] {background-color: #E90080;}
+    
+    /* Add text color rules to ensure visibility */
+    p, div {color: #333333;} /* Dark gray text */
+    h1, h2, h3 {color: #222222;} /* Even darker text for headings */
+    
+    /* Status indicators styling fix */
+    .status-box {
+        display: flex;
+        align-items: center;
+        padding: 10px;
+        border-radius: 5px;
+        background-color: #f0f0f0;
+        color: #333333;
+        margin-bottom: 10px;
+    }
+    .status-indicator {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        margin-right: 10px;
+    }
+</style>
+""", unsafe_allow_html=True)
