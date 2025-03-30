@@ -78,12 +78,6 @@ def get_mongodb_connection():
         # Test the connection
         client.admin.command('ping')
         
-        # Rest of the code remains the same...
-        )
-        
-        # Test the connection
-        client.admin.command('ping')
-        
         # Get database
         db = client.ralphbot_analytics
         
