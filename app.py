@@ -93,7 +93,7 @@ else:
     # Display status indicators
     col1, col2 = st.columns(2)
     with col1:
-    st.markdown(f"""
+        st.markdown(f"""
     <div class="status-box">
         <div class="status-indicator" style="background-color: {streamlit_color};"></div>
         <div>
