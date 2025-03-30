@@ -68,8 +68,8 @@ if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
     def authenticate():
-    password = st.sidebar.text_input("Enter dashboard password", type="password").strip()
-    dashboard_pwd = st.secrets.get("dashboard", {}).get("password", "ralphbot123").strip()
+        password = st.sidebar.text_input("Enter dashboard password", type="password").strip()
+        dashboard_pwd = st.secrets.get("dashboard", {}).get("password", "ralphbot123").strip()
     
     # Debug prints (remove in production)
     st.sidebar.write(f"Input length: {len(password)}")
