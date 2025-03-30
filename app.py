@@ -59,7 +59,7 @@ def get_mongodb_connection():
    # Inside your get_mongodb_connection() function
     try:
     # Get MongoDB URI from secrets or use fallback
-    mongo_uri = st.secrets.get("mongodb", {}).get("uri", None)
+        mongo_uri = st.secrets.get("mongodb", {}).get("uri", None)
     if not mongo_uri:
         mongo_uri = "mongodb+srv://br00kd0wnt0wn:XHZo54P7bqrVUIzj@ralphbot.nsyijw5.mongodb.net/?retryWrites=true&w=majority&appName=RalphBot"
         st.sidebar.info("Using hardcoded MongoDB connection")
