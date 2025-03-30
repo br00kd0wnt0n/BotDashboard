@@ -30,8 +30,10 @@ API_BASE_URL = "https://ralphbot-api-ef7a0f4b6655.herokuapp.com/"
 # Function to fetch data from API with error handling
 def fetch_api_data(endpoint, params=None):
     try:
-        response = requests.get(f"{API_BASE_URL}/{endpoint}", params=params, timeout=10)
-        response.raise_for_status()  # Raise an exception for 4XX/5XX responses
+        # Remove the extra slash and ensure clean URL construction
+        full_url = f"{API_BASE_URL.rstrip('/')}/{endpoint.lstrip('/')}"
+        response = requests.get(full_url, params=params, timeout=10)
+        response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
         st.sidebar.error(f"API Error: {str(e)}")
