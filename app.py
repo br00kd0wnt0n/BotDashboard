@@ -63,13 +63,35 @@ def get_mock_data():
     
     return MockDB()
 
+import os
+import streamlit as st
+
 # Authentication
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
-    def authenticate():
-        password = st.sidebar.text_input("Enter dashboard password", type="password").strip()
-        dashboard_pwd = st.secrets.get("dashboard", {}).get("password", "ralphbot123").strip()
+def authenticate():
+    # Use st.text_input inside the function to ensure it's always defined
+    password_input = st.sidebar.text_input("Enter dashboard password", type="password", key="dashboard_password")
+    
+    # Get password from environment or secrets
+    dashboard_pwd = os.environ.get('DASHBOARD_PASSWORD', 
+                    st.secrets.get("dashboard", {}).get("password", "ralphbot123"))
+    
+    # Authentication logic
+    if password_input == dashboard_pwd:
+        st.session_state.authenticated = True
+    elif password_input:  # Only show error if something was typed
+        st.sidebar.error("Invalid password")
+
+# Main authentication flow
+if not st.session_state.authenticated:
+    st.title("RalphBot Analytics Dashboard")
+    st.write("Please authenticate to view the dashboard")
+    authenticate()
+else:
+    # Rest of your existing dashboard code starts here
+    # (The entire existing code block remains the same)
     
     # Debug prints (remove in production)
     st.sidebar.write(f"Input length: {len(password)}")
